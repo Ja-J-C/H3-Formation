@@ -1,0 +1,27 @@
+#!/bin/bash
+# name of file to save data to
+sumfilename=sumdens.dat
+
+# point to sum around  unit=angstrom
+xp=100
+yp=0
+zp=0
+rad=100
+
+# fix path to program. Wherever you compile it
+#prog=/shared/home/cody/install/other/dens_sum_about_point_useBOV
+prog=/scratch/user/u.kw224068/dens_frag/dens_sum_about_point_useBOV
+
+echo "#time        Dens_sum            n_pts" > $sumfilename
+
+
+filelist=$(ls dens0*.bov | sort -n)
+
+for f in $filelist; do
+
+echo "$prog $f $sumfilename $xp $yp $zp $rad"
+$prog $f $sumfilename $xp $yp $zp $rad
+
+done
+
+echo " !! data is stored in $sumfilename !!"
