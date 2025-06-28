@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+
+
+# 可执行程序路径
+
+prog="/expanse/lustre/scratch/cjiang2/temp_project/dens_sum_about_point_useBOV"
+
+# 汇总结果文件
+
+sumfile="sumdens.dat"
+
+
+
+# 球心坐标 & 半径 (Å)
+
+# point to sum around  (Å)
+
+#  make sure to use "-" as minus sign, which is different than the one you typed in from your keyboard
+
+#  TODO: copy the above sign
+
+xp=-2.1423
+
+yp=0.3564
+
+zp=-1.0145
+
+rad=1.5
+
+
+
+
+
+
+
+printf '#time  dens_sum  n_pts\n' > "$sumfile"
+
+
+
+# 按自然数排序遍历所有 dens*.bov
+
+mapfile -t files < <(printf '%s\n' dens*.bov | sort -V)
+
+
+
+for f in "${files[@]}"; do
+
+    echo ">> processing $f"
+
+    tmp=$(mktemp)
+
+
+
+    # 过滤头部并只保留前 10 行
+
+    awk '
+
+    BEGIN { OFS=" "; IGNORECASE=1 }
+
+    # 通用清洗：去 CR/TAB/非 ASCII 空格/长破折号；溢出星号→0.0
+
+    { sub(/\r$/,""); gsub(/\t/," "); gsub(/\xC2\xA0/," ");
+
+      gsub(/\xE2\x88\x92/,"-"); gsub(/\*+/,"0.0") }
+
+
+
+    # 1) DATA_FILE → 只输出 .dat 文件名
+
+    /^[[:space:]]*DATA[[:space:]_]*FILE[[:space:]:=]*/ {
+
+        gsub(/["=:]/," ")
+
+        sub(/^[[:space:]]*DATA[[:space:]_]*FILE[[:space:]:=]*/,"")
+
+        print; next
+
+    }
+
+
+
+    # 2) TIME → 去掉标签，只留数字
+
+    /^[[:space:]]*TIME[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*TIME[[:space:]:=]*/,"")
+
+        print; next
+
+    }
+
+
+
+    # 3) DATA_SIZE → 去掉标签，只留数字
+
+    /^[[:space:]]*DATA_SIZE[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*DATA_SIZE[[:space:]:=]*/,"")
+
+        print; next
+
+    }
+
+
+
+    # 4–7) DATA_FORMAT / VARIABLE / DATA_ENDIAN / CENTERING
+
+    #     → 去掉 “LABEL:”，只留关键字
+
+    /^[[:space:]]*(DATA_FORMAT|VARIABLE|DATA_ENDIAN|CENTERING)[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*(DATA_FORMAT|VARIABLE|DATA_ENDIAN|CENTERING)[[:space:]:=]*/,"")
+
+        print; next
+
+    }
+
+
+
+    # 8) BRICK_ORIGIN → 只保留最后 3 个实数
+
+    /^[[:space:]]*BRICK_ORIGIN[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*BRICK_ORIGIN[[:space:]:=]*/,"")
+
+        n = split($0,a,/ +/)
+
+        print a[n-2], a[n-1], a[n]
+
+        next
+
+    }
+
+
+
+    # 9) BRICK_SIZE → 只保留最后 3 个实数
+
+    /^[[:space:]]*BRICK_SIZE[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*BRICK_SIZE[[:space:]:=]*/,"")
+
+        n = split($0,a,/ +/)
+
+        print a[n-2], a[n-1], a[n]
+
+        next
+
+    }
+
+
+
+    # 10) BYTE_OFFSET → 去掉标签，只留数字
+
+    /^[[:space:]]*BYTE_OFFSET[[:space:]:=]*/ {
+
+        sub(/^[[:space:]]*BYTE_OFFSET[[:space:]:=]*/,"")
+
+        print; next
+
+    }
+
+
+
+    # 其他行原样保留
+
+    { print }
+
+    ' "$f" | head -10 > "$tmp"
+
+
+
+    # 调用 Fortran 程序
+
+    "$prog" "$tmp" "$sumfile" "$xp" "$yp" "$zp" "$rad"
+
+    rm -f "$tmp"
+
+done
+
+
+
+
+echo "!! data stored in $sumfile"
+
+
